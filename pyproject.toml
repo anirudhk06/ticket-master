@@ -1,0 +1,17 @@
+[project]
+name = "ticket-master"
+version = "0.1.0"
+description = "An event-driven ticket booking system using Django, FastAPI, RabbitMQ, and PostgreSQL."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=6.0.1",
+    "django-crum>=0.7.9",
+    "django-environ>=0.12.0",
+    "djangorestframework>=3.16.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.10",
+]
