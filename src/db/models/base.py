@@ -3,7 +3,7 @@ import uuid
 from django.db import models
 from crum import get_current_user
 
-from .mixins import AuditModel
+from ..mixins import AuditModel
 
 
 class BaseModel(AuditModel):
@@ -20,16 +20,13 @@ class BaseModel(AuditModel):
         if user is None or user.is_anonymous:
             self.created_by = None
             self.updated_by = None
-            super(BaseModel, self).save(*args, **kwargs)
         else:
-
             if self._state.adding:
-
                 self.created_by = user
                 self.updated_by = None
-
             self.updated_by = user
-            super(BaseModel, self).save(*args, **kwargs)
 
-    def __str__(self):
+        super(BaseModel, self).save(*args, **kwargs)
+
+    def __str__(self) -> str:
         return str(self.id)

@@ -3,10 +3,9 @@ from config.env import BASE_DIR, ENV
 
 ENV.read_env(env_file=os.path.join(BASE_DIR.parent, ".env"), overwrite=True)
 
-
 # Application definition
 LOCAL_APPS = [
-    "apps.users",
+    "db",
 ]
 
 INSTALLED_APPS = [
@@ -85,3 +84,5 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "static/"
+
+AUTH_USER_MODEL = "db.User"
