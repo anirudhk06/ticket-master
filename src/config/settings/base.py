@@ -6,6 +6,14 @@ ENV.read_env(env_file=os.path.join(BASE_DIR.parent, ".env"), overwrite=True)
 # Application definition
 LOCAL_APPS = [
     "db",
+    "authentication",
+]
+
+THIRD_PARTY_APPS = [
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
 ]
 
 INSTALLED_APPS = [
@@ -15,6 +23,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    *THIRD_PARTY_APPS,
     *LOCAL_APPS,
 ]
 
@@ -26,7 +35,10 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # django-crum
     "crum.CurrentRequestUserMiddleware",
+    # allauth
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
