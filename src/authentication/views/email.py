@@ -23,8 +23,6 @@ class SignInAuthEndpoint(APIView):
             request, email=validated_data["email"], password=validated_data["password"]
         )
 
-        print(validated_data)
-
         if not user:
             return Response(
                 {"detail": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST
