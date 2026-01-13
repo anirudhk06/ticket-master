@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from config.env import BASE_DIR, ENV
 
 ENV.read_env(env_file=os.path.join(BASE_DIR.parent, ".env"), overwrite=True)
@@ -14,6 +15,7 @@ THIRD_PARTY_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "rest_framework_simplejwt.token_blacklist",
 ]
 
 INSTALLED_APPS = [
@@ -98,3 +100,16 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 AUTH_USER_MODEL = "db.User"
+
+
+SIMPLE_JWT = {
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ]
+}

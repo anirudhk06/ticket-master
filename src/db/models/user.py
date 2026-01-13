@@ -13,6 +13,7 @@ from .base import BaseModel
 class User(AbstractUser, TimeAuditModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
+    username = models.CharField(max_length=150, blank=True, null=True, unique=False)
     email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=255)
 
@@ -36,14 +37,18 @@ class User(AbstractUser, TimeAuditModel):
 
     user_timezone = models.CharField(max_length=50, default="UTC")
 
+    last_login_medium = models.CharField(max_length=255, null=True, blank=True)
+    last_login_ip = models.CharField(max_length=255, null=True, blank=True)
+    last_login_uagent = models.CharField(max_length=255, null=True, blank=True)
+
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    REQUIRED_FIELDS = []
 
     class Meta:
         ordering = ("-created_at",)
 
     def __str__(self) -> str:
-        return f"{self.username} <{self.email}>"
+        return f"<{self.email}>"
 
 
 class OrganizerProfile(BaseModel):
