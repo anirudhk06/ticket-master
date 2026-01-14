@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,10 +10,13 @@ from authentication.serializers import (
     EmailLoginSerializer,
     EmailSignUpSerializer,
 )
+from bgtasks.user_email_activation_task import user_activation_email
 from db.models import OrganizerProfile, User
 
 
 class SignInAuthEndpoint(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = EmailLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -48,12 +51,13 @@ class SignInAuthEndpoint(APIView):
 
 
 class SignUpAuthEndpoint(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = EmailSignUpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         validated_data: dict[str, str] = serializer.validated_data
-        print(validated_data)
 
         if User.objects.filter(email=validated_data["email"]).exists():
             return Response(
@@ -80,6 +84,7 @@ class SignUpAuthEndpoint(APIView):
                 ]
             )
 
+            user_activation_email.delay(user.pk)
             OrganizerProfile.objects.create(user=user)
 
         refresh = RefreshToken.for_user(user)
@@ -94,6 +99,8 @@ class SignUpAuthEndpoint(APIView):
 
 
 class RefreshTokenEndpoint(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         refresh_token: str = request.data.get("refresh")
 
