@@ -8,6 +8,7 @@ from authentication.views.email import (
     SignInAuthEndpoint,
     SignOutAuthEndpoint,
     SignUpAuthEndpoint,
+    RefreshTokenEndpoint,
 )
 from db.models import User
 
@@ -187,3 +188,83 @@ class TestSignOutAuthentication(TestCase):
 
         self.assertEqual(response.status_code, 205)
         self.assertEqual(BlacklistedToken.objects.count(), 1)
+
+
+class TestRefreshTokenAuthentication(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+
+    def test_refresh_token_success(self):
+        user = User.objects.create(email="user@test.com")
+        user.set_password("StrongPass@123")
+        user.save()
+
+        refresh = RefreshToken.for_user(user)
+
+        request = self.factory.post(
+            "/auth/refresh-token",
+            {"refresh": str(refresh)},
+            format="json",
+        )
+
+        response = RefreshTokenEndpoint.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+
+    def test_refresh_token_missing(self):
+        request = self.factory.post(
+            "/auth/refresh-token",
+            {},
+            format="json",
+        )
+
+        response = RefreshTokenEndpoint.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_refresh_token_invalid(self):
+        request = self.factory.post(
+            "/auth/refresh-token",
+            {"refresh": "invalid.token.value"},
+            format="json",
+        )
+
+        response = RefreshTokenEndpoint.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_refresh_token_blacklisted(self):
+        user = User.objects.create(email="user@test.com")
+        user.set_password("StrongPass@123")
+        user.save()
+
+        refresh = RefreshToken.for_user(user)
+        refresh.blacklist()
+
+        request = self.factory.post(
+            "/auth/refresh-token",
+            {"refresh": str(refresh)},
+            format="json",
+        )
+
+        response = RefreshTokenEndpoint.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_refresh_token_not_blacklisted_on_success(self):
+        user = User.objects.create(email="user@test.com")
+        user.set_password("StrongPass@123")
+        user.save()
+
+        refresh = RefreshToken.for_user(user)
+
+        request = self.factory.post(
+            "/auth/refresh-token",
+            {"refresh": str(refresh)},
+            format="json",
+        )
+
+        RefreshTokenEndpoint.as_view()(request)
+
+        self.assertEqual(BlacklistedToken.objects.count(), 0)

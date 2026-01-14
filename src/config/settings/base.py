@@ -8,6 +8,7 @@ ENV.read_env(env_file=os.path.join(BASE_DIR.parent, ".env"), overwrite=True)
 LOCAL_APPS = [
     "db",
     "authentication",
+    "bgtasks",
 ]
 
 THIRD_PARTY_APPS = [

@@ -93,6 +93,28 @@ class SignUpAuthEndpoint(APIView):
         )
 
 
+class RefreshTokenEndpoint(APIView):
+    def post(self, request, *args, **kwargs):
+        refresh_token: str = request.data.get("refresh")
+
+        if not refresh_token:
+            return Response(
+                {"detail": "refresh token is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            refresh = RefreshToken(refresh_token)
+            access = str(refresh.access_token)
+        except:
+            return Response(
+                {"detail": "Invalid or expired refresh token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"access": access})
+
+
 class SignOutAuthEndpoint(APIView):
     permission_classes = [IsAuthenticated]
 
