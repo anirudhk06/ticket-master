@@ -1,270 +1,304 @@
-from django.test import TestCase
-from rest_framework.test import APIRequestFactory
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from authentication.views.email import (
+    RefreshTokenEndpoint,
     SignInAuthEndpoint,
     SignOutAuthEndpoint,
     SignUpAuthEndpoint,
-    RefreshTokenEndpoint,
 )
-from db.models import User
+
+User = get_user_model()
 
 
-class TestSignUpAuthentication(TestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.authentication = JWTAuthentication()
-
-    def test_signup_success(self):
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "Test@123",
-                "confirm_password": "Test@123",
-            },
-            format="json",
-        )
-
-        response = SignUpAuthEndpoint.as_view()(request)
-        self.assertEqual(response.status_code, 201)
-
-    def test_signup_duplicate_email(self):
-        User.objects.create_user(
-            email="user@test.com",
-            username="user",
-            password="Test@123",
-        )
-
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "Test@123",
-                "confirm_password": "Test@123",
-            },
-            format="json",
-        )
-
-        response = SignUpAuthEndpoint.as_view()(request)
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_signup_password_mismatch(self):
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "StrongPass@123",
-                "confirm_password": "WrongPass@123",
-            },
-            format="json",
-        )
-        response = SignUpAuthEndpoint.as_view()(request)
-        self.assertEqual(response.status_code, 400)
-
-    def test_signup_weak_password(self):
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "123",
-                "confirm_password": "123",
-            },
-            format="json",
-        )
-        response = SignUpAuthEndpoint.as_view()(request)
-        self.assertEqual(response.status_code, 400)
-
-    def test_signup_returns_tokens(self):
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "StrongPass@123",
-                "confirm_password": "StrongPass@123",
-            },
-            format="json",
-        )
-        response = SignUpAuthEndpoint.as_view()(request)
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
-
-    def test_last_login_medium(self):
-        request = self.factory.post(
-            "/auth/sign-up",
-            {
-                "email": "user@test.com",
-                "password": "StrongPass@123",
-                "confirm_password": "StrongPass@123",
-            },
-            format="json",
-        )
-
-        SignUpAuthEndpoint.as_view()(request)
-        user = User.objects.get(email="user@test.com")
-
-        self.assertEqual(user.last_login_medium, "email")
+@pytest.fixture
+def api_factory():
+    return APIRequestFactory()
 
 
-class TestSignInAuthentication(TestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.authentication = JWTAuthentication()
+@pytest.mark.django_db
+def test_signup_success(api_factory):
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "Test@123",
+            "confirm_password": "Test@123",
+        },
+        format="json",
+    )
 
-    def test_signin_success(self):
-        user = User.objects.create(email="user@test.com", last_login_medium="email")
-        user.set_password("StrongPass@123")
-        user.save()
-
-        request = self.factory.post(
-            "/auth/sign-in",
-            {"email": "user@test.com", "password": "StrongPass@123"},
-            format="json",
-        )
-
-        response = SignInAuthEndpoint.as_view()(request)
-
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
-        self.assertEqual(user.last_login_medium, "email")
-        self.assertEqual(user.pk, response.data["user_id"])
-        self.assertEqual(response.status_code, 200)
-
-    def test_wrong_password(self):
-        user = User.objects.create(
-            email="user@test.com",
-        )
-        user.set_password("StrongPass@123")
-        user.save()
-
-        request = self.factory.post(
-            "/auth/sign-in",
-            {"email": "user@test.com", "password": "WrongPass@123"},
-            format="json",
-        )
-
-        response = SignInAuthEndpoint.as_view()(request)
-
-        self.assertEqual(response.status_code, 400)
-
-    def test_signin_non_existent_user(self):
-        request = self.factory.post(
-            "/auth/sign-in",
-            {"email": "user@test.com", "password": "StrongPass@123"},
-            format="json",
-        )
-
-        response = SignInAuthEndpoint.as_view()(request)
-        self.assertEqual(response.status_code, 400)
+    response = SignUpAuthEndpoint.as_view()(request)
+    assert response.status_code == 201
 
 
-class TestSignOutAuthentication(TestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
-        self.authentication = JWTAuthentication()
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_signup_same_email():
+    client = APIClient()
 
-    def test_logout_success(self):
-        user = User.objects.create_user(
-            email="user@test.com",
-            username="user",
-            password="StrongPass@123",
-        )
+    payload = {
+        "email": "user@test.com",
+        "password": "Test@123",
+        "confirm_password": "Test@123",
+    }
 
-        refresh = RefreshToken.for_user(user)
+    def signup():
+        return client.post("/auth/sign-up", payload, format="json")
 
-        factory = APIRequestFactory()
-        request = factory.post(
-            "/auth/sign-out/",
-            {"refresh": str(refresh)},
-            format="json",
-            HTTP_AUTHORIZATION=f"Bearer {str(refresh.access_token)}",
-        )
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        responses = list(executor.map(lambda _: signup(), range(5)))
 
-        response = SignOutAuthEndpoint.as_view()(request)
+    success_response = [r for r in responses if r.status_code == 201]
+    failed_responses = [r for r in responses if r.status_code == 400]
 
-        self.assertEqual(response.status_code, 205)
-        self.assertEqual(BlacklistedToken.objects.count(), 1)
+    assert len(success_response) == 1
+    assert len(failed_responses) == 4
+    assert User.objects.filter(email="user@test.com").count() == 1
 
 
-class TestRefreshTokenAuthentication(TestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
+@pytest.mark.django_db
+def test_signup_duplicate_email(api_factory):
+    User.objects.create_user(
+        email="user@test.com",
+        username="user",
+        password="Test@123",
+    )
 
-    def test_refresh_token_success(self):
-        user = User.objects.create(email="user@test.com")
-        user.set_password("StrongPass@123")
-        user.save()
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "Test@123",
+            "confirm_password": "Test@123",
+        },
+        format="json",
+    )
 
-        refresh = RefreshToken.for_user(user)
+    response = SignUpAuthEndpoint.as_view()(request)
+    assert response.status_code == 400
 
-        request = self.factory.post(
-            "/auth/refresh-token",
-            {"refresh": str(refresh)},
-            format="json",
-        )
 
-        response = RefreshTokenEndpoint.as_view()(request)
+@pytest.mark.django_db
+def test_signup_password_mismatch(api_factory):
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "StrongPass@123",
+            "confirm_password": "WrongPass@123",
+        },
+        format="json",
+    )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("access", response.data)
+    response = SignUpAuthEndpoint.as_view()(request)
+    assert response.status_code == 400
 
-    def test_refresh_token_missing(self):
-        request = self.factory.post(
-            "/auth/refresh-token",
-            {},
-            format="json",
-        )
 
-        response = RefreshTokenEndpoint.as_view()(request)
+@pytest.mark.django_db
+def test_signup_weak_password(api_factory):
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "123",
+            "confirm_password": "123",
+        },
+        format="json",
+    )
 
-        self.assertEqual(response.status_code, 400)
+    response = SignUpAuthEndpoint.as_view()(request)
+    assert response.status_code == 400
 
-    def test_refresh_token_invalid(self):
-        request = self.factory.post(
-            "/auth/refresh-token",
-            {"refresh": "invalid.token.value"},
-            format="json",
-        )
 
-        response = RefreshTokenEndpoint.as_view()(request)
+@pytest.mark.django_db
+def test_signup_returns_tokens(api_factory):
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "StrongPass@123",
+            "confirm_password": "StrongPass@123",
+        },
+        format="json",
+    )
 
-        self.assertEqual(response.status_code, 400)
+    response = SignUpAuthEndpoint.as_view()(request)
+    assert "access" in response.data
+    assert "refresh" in response.data
 
-    def test_refresh_token_blacklisted(self):
-        user = User.objects.create(email="user@test.com")
-        user.set_password("StrongPass@123")
-        user.save()
 
-        refresh = RefreshToken.for_user(user)
-        refresh.blacklist()
+@pytest.mark.django_db
+def test_signup_sets_last_login_medium(api_factory):
+    request = api_factory.post(
+        "/auth/sign-up",
+        {
+            "email": "user@test.com",
+            "password": "StrongPass@123",
+            "confirm_password": "StrongPass@123",
+        },
+        format="json",
+    )
 
-        request = self.factory.post(
-            "/auth/refresh-token",
-            {"refresh": str(refresh)},
-            format="json",
-        )
+    SignUpAuthEndpoint.as_view()(request)
+    user = User.objects.get(email="user@test.com")
 
-        response = RefreshTokenEndpoint.as_view()(request)
+    assert user.last_login_medium == "email"
 
-        self.assertEqual(response.status_code, 400)
 
-    def test_refresh_token_not_blacklisted_on_success(self):
-        user = User.objects.create(email="user@test.com")
-        user.set_password("StrongPass@123")
-        user.save()
+@pytest.mark.django_db
+def test_signin_success(api_factory):
+    user = User.objects.create(email="user@test.com", last_login_medium="email")
+    user.set_password("StrongPass@123")
+    user.save()
 
-        refresh = RefreshToken.for_user(user)
+    request = api_factory.post(
+        "/auth/sign-in",
+        {"email": "user@test.com", "password": "StrongPass@123"},
+        format="json",
+    )
 
-        request = self.factory.post(
-            "/auth/refresh-token",
-            {"refresh": str(refresh)},
-            format="json",
-        )
+    response = SignInAuthEndpoint.as_view()(request)
 
-        RefreshTokenEndpoint.as_view()(request)
+    assert response.status_code == 200
+    assert "access" in response.data
+    assert "refresh" in response.data
+    assert response.data["user_id"] == user.pk
 
-        self.assertEqual(BlacklistedToken.objects.count(), 0)
+
+@pytest.mark.django_db
+def test_signin_wrong_password(api_factory):
+    user = User.objects.create(email="user@test.com")
+    user.set_password("StrongPass@123")
+    user.save()
+
+    request = api_factory.post(
+        "/auth/sign-in",
+        {"email": "user@test.com", "password": "WrongPass@123"},
+        format="json",
+    )
+
+    response = SignInAuthEndpoint.as_view()(request)
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_signin_non_existent_user(api_factory):
+    request = api_factory.post(
+        "/auth/sign-in",
+        {"email": "user@test.com", "password": "StrongPass@123"},
+        format="json",
+    )
+
+    response = SignInAuthEndpoint.as_view()(request)
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_logout_success(api_factory):
+    user = User.objects.create_user(
+        email="user@test.com",
+        username="user",
+        password="StrongPass@123",
+    )
+
+    refresh = RefreshToken.for_user(user)
+
+    request = api_factory.post(
+        "/auth/sign-out/",
+        {"refresh": str(refresh)},
+        format="json",
+        HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}",
+    )
+
+    response = SignOutAuthEndpoint.as_view()(request)
+
+    assert response.status_code == 205
+    assert BlacklistedToken.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_refresh_token_success(api_factory):
+    user = User.objects.create(email="user@test.com")
+    user.set_password("StrongPass@123")
+    user.save()
+
+    refresh = RefreshToken.for_user(user)
+
+    request = api_factory.post(
+        "/auth/refresh-token",
+        {"refresh": str(refresh)},
+        format="json",
+    )
+
+    response = RefreshTokenEndpoint.as_view()(request)
+
+    assert response.status_code == 200
+    assert "access" in response.data
+
+
+@pytest.mark.django_db
+def test_refresh_token_missing(api_factory):
+    request = api_factory.post(
+        "/auth/refresh-token",
+        {},
+        format="json",
+    )
+
+    response = RefreshTokenEndpoint.as_view()(request)
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_refresh_token_invalid(api_factory):
+    request = api_factory.post(
+        "/auth/refresh-token",
+        {"refresh": "invalid.token.value"},
+        format="json",
+    )
+
+    response = RefreshTokenEndpoint.as_view()(request)
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_refresh_token_blacklisted(api_factory):
+    user = User.objects.create(email="user@test.com")
+    user.set_password("StrongPass@123")
+    user.save()
+
+    refresh = RefreshToken.for_user(user)
+    refresh.blacklist()
+
+    request = api_factory.post(
+        "/auth/refresh-token",
+        {"refresh": str(refresh)},
+        format="json",
+    )
+
+    response = RefreshTokenEndpoint.as_view()(request)
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_refresh_token_not_blacklisted_on_success(api_factory):
+    user = User.objects.create(email="user@test.com")
+    user.set_password("StrongPass@123")
+    user.save()
+
+    refresh = RefreshToken.for_user(user)
+
+    request = api_factory.post(
+        "/auth/refresh-token",
+        {"refresh": str(refresh)},
+        format="json",
+    )
+
+    RefreshTokenEndpoint.as_view()(request)
+
+    assert BlacklistedToken.objects.count() == 0

@@ -1,39 +1,43 @@
 import uuid
-from django.contrib.auth.models import AbstractUser
+
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin,
+)
 from django.db import models
-from django.utils import timezone
-import pytz
 
 
-from .assets import FileAsset
-from ..mixins import TimeAuditModel
-from .base import BaseModel
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("The Email field must be set")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+        return self.create_user(email, password, **extra_fields)
 
 
-class User(AbstractUser, TimeAuditModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
+class User(AbstractBaseUser, PermissionsMixin):
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, db_index=True
+    )
     username = models.CharField(max_length=150, blank=True, null=True, unique=False)
-    email = models.EmailField(unique=True)
-    display_name = models.CharField(max_length=255)
+    email = models.EmailField(unique=True, db_index=True)
+    first_name = models.CharField(max_length=150, blank=True, null=True)
+    last_name = models.CharField(max_length=150, blank=True, null=True)
 
-    avatar = models.TextField(blank=True, null=True)
-    avatar_asset = models.ForeignKey(
-        FileAsset,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="user_avatar",
-    )
-
-    cover_image = models.URLField(blank=True, null=True, max_length=800)
-    cover_image_asset = models.ForeignKey(
-        FileAsset,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="user_cover_images",
-    )
+    is_staff = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    is_superuser = models.BooleanField(default=False)
+    is_password_autoset = models.BooleanField(default=False)
 
     user_timezone = models.CharField(max_length=50, default="UTC")
 
@@ -41,23 +45,30 @@ class User(AbstractUser, TimeAuditModel):
     last_login_ip = models.CharField(max_length=255, null=True, blank=True)
     last_login_uagent = models.CharField(max_length=255, null=True, blank=True)
 
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+
+    created_by = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users_created",
+        verbose_name="Created By",
+    )
+
+    updated_by = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users_updated",
+        verbose_name="Updated By",
+    )
+
+    objects = UserManager()
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
     class Meta:
-        ordering = ("-created_at",)
-
-    def __str__(self) -> str:
-        return f"<{self.email}>"
-
-
-class OrganizerProfile(BaseModel):
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="organizer_profile"
-    )
-
-
-class EventMember(BaseModel):
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="event_member"
-    )
+        ordering = ["-created_at"]

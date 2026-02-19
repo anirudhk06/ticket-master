@@ -12,11 +12,9 @@ LOCAL_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
-    "allauth",
-    "allauth.account",
-    "allauth.socialaccount",
-    "allauth.socialaccount.providers.google",
+    "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
+    "corsheaders",
 ]
 
 INSTALLED_APPS = [
@@ -31,6 +29,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # cors
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -40,8 +40,6 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # django-crum
     "crum.CurrentRequestUserMiddleware",
-    # allauth
-    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -117,9 +115,13 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "NON_FIELD_ERRORS_KEY": "errors",
 }
-
 
 CELERY_BROKER_URL = ENV.str("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+
+
+GOOGLE_CLIENT_ID = ENV.str("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = ENV.str("GOOGLE_CLIENT_SECRET", "")

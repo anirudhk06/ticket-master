@@ -1,7 +1,7 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
 from django.db import transaction
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -10,8 +10,8 @@ from authentication.serializers import (
     EmailLoginSerializer,
     EmailSignUpSerializer,
 )
-from bgtasks.user_email_activation_task import user_activation_email
-from db.models import OrganizerProfile, User
+
+User = get_user_model()
 
 
 class SignInAuthEndpoint(APIView):
@@ -32,8 +32,8 @@ class SignInAuthEndpoint(APIView):
             )
 
         user.last_login_medium = "email"
-        user.last_login_ip = self.request.META.get("REMOTE_ADDR")
-        user.last_login_uagent = self.request.META.get("HTTP_USER_AGENT")
+        user.last_login_ip = request.META.get("REMOTE_ADDR")
+        user.last_login_uagent = request.META.get("HTTP_USER_AGENT")
         user.save(
             update_fields=["last_login_medium", "last_login_ip", "last_login_uagent"]
         )
@@ -42,10 +42,13 @@ class SignInAuthEndpoint(APIView):
 
         return Response(
             {
-                "user_id": user.pk,
-                "username": user.username,
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
+                "user": {
+                    "user_id": user.pk,
+                    "username": user.username,
+                    "email": user.email,
+                },
             }
         )
 
@@ -59,33 +62,35 @@ class SignUpAuthEndpoint(APIView):
 
         validated_data: dict[str, str] = serializer.validated_data
 
-        if User.objects.filter(email=validated_data["email"]).exists():
+        if User.objects.filter(email__iexact=validated_data["email"]).exists():
             return Response(
                 {"email": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        with transaction.atomic():
-            user = User.objects.create(
-                email=validated_data["email"],
-                username=validated_data["email"].split("@")[0],
-                display_name=validated_data["email"].split("@")[0],
-            )
+        try:
+            with transaction.atomic():
+                user = User.objects.create(
+                    email=validated_data["email"],
+                    username=validated_data["email"].split("@")[0],
+                )
 
-            user.set_password(validated_data["password"])
-            user.last_login_medium = "email"
-            user.last_login_ip = self.request.META.get("REMOTE_ADDR")
-            user.last_login_uagent = self.request.META.get("HTTP_USER_AGENT")
-            user.save(
-                update_fields=[
-                    "password",
-                    "last_login_medium",
-                    "last_login_ip",
-                    "last_login_uagent",
-                ]
+                user.set_password(validated_data["password"])
+                user.last_login_medium = "email"
+                user.last_login_ip = request.META.get("REMOTE_ADDR")
+                user.last_login_uagent = request.META.get("HTTP_USER_AGENT")
+                user.save(
+                    update_fields=[
+                        "password",
+                        "last_login_medium",
+                        "last_login_ip",
+                        "last_login_uagent",
+                    ]
+                )
+        except Exception:
+            return Response(
+                {"detial": "Something went wrong please try again"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-
-            user_activation_email.delay(user.pk)
-            OrganizerProfile.objects.create(user=user)
 
         refresh = RefreshToken.for_user(user)
         return Response(
