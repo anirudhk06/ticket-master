@@ -1,11 +1,11 @@
 from .base import *
 
-SECRET_KEY = "django-insecure-*$j$%n!l088o3#=crm2b)_axpg8r24sv8y9fh&co(sm^jgd#f$"
+SECRET_KEY = ENV.str("SECRET_KEY", "")
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
-CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+ALLOWED_HOSTS = ENV.list("ALLOWED_HOSTS", default=[])
+CORS_ALLOWED_ORIGINS = ENV.list("CORS_ALLOWED_ORIGINS", default=[])
 CORS_ALLOW_CREDENTIALS = True
 
 DATABASES = {

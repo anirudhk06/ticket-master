@@ -93,7 +93,7 @@ class GoogleOauthCallbackEndpoint(APIView):
             id_token_jwt,
             google_requests.Request(),
             GOOGLE_CLIENT_ID,
-            clock_skew_in_seconds=30,
+            clock_skew_in_seconds=60,
         )
 
         if google_user_info["iss"] not in [
