@@ -9,6 +9,7 @@ LOCAL_APPS = [
     "db",
     "authentication",
     "bgtasks",
+    "app",
 ]
 
 THIRD_PARTY_APPS = [
