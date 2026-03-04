@@ -16,7 +16,7 @@ THIRD_PARTY_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
-    "query_counter",
+    "silk",
 ]
 
 INSTALLED_APPS = [
@@ -42,8 +42,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # django-crum
     "crum.CurrentRequestUserMiddleware",
-    # query_counter
-    "query_counter.middleware.DjangoQueryCounterMiddleware",
+    # django-silk
+    "silk.middleware.SilkyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

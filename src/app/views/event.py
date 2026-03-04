@@ -21,11 +21,12 @@ class NearestWeekendEventsAPI(generics.ListAPIView):
             EventMaster.objects.filter(
                 is_published=True, start_at__date__gte=timezone.now().date()
             )
+            .select_related("category")
+            .prefetch_related("tickets")
             .annotate(
                 starting_from=Min("tickets__price"),
                 total_quantity=Coalesce(Sum("tickets__quantity"), 0),
             )
-            .select_related("category")
         ).values(
             "id",
             "name",

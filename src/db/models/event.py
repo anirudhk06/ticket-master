@@ -71,6 +71,9 @@ class EventMaster(BaseModel):
     class Meta:
         verbose_name = "Event"
         verbose_name_plural = "Events"
+        indexes = [
+            models.Index(fields=["start_at", "is_published", "end_at", "is_featured"]),
+        ]
 
     def __str__(self) -> str:
         return self.name
