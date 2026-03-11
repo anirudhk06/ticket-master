@@ -1,9 +1,2 @@
-from .assets import Asset
-from .event import (
-    EventAsset,
-    EventCategory,
-    EventMaster,
-    EventTag,
-    EventTicket,
-)
+from .event import EventCategory, EventMaster, TicketMaster
 from .user import User

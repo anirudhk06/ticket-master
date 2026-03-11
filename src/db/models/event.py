@@ -1,147 +1,70 @@
 from django.db import models
+from django.utils.text import slugify
 
-from .assets import Asset
 from .base import BaseModel
 
 
-class EventTag(BaseModel):
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=100, unique=True)
-
-    class Meta:
-        verbose_name = "Event Tag"
-        verbose_name_plural = "Event Tags"
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class EventCategory(BaseModel):
-    name = models.CharField(max_length=255, db_index=True, unique=True)
-    emoji = models.CharField(max_length=10, null=True, blank=True, default="🎪")
-    description = models.TextField(blank=True, default="")
-    slug = models.SlugField(max_length=255, unique=True)
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+    emoji = models.CharField(max_length=10, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         verbose_name = "Event Category"
         verbose_name_plural = "Event Categories"
-
-    def __str__(self) -> str:
-        return self.name
+        ordering = ("-created_at",)
 
 
 class EventMaster(BaseModel):
-    name = models.CharField(max_length=255, db_index=True)
-    description = models.TextField(blank=True, default="")
+    class EventStatus(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        PUBLISHED = "PUBLISHED", "Published"
+        CANCELLED = "CANCELLED", "Cancelled"
+        COMPLETED = "COMPLETED", "Completed"
 
-    main_image = models.ForeignKey(
-        Asset,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="event_banner_images",
-    )
-
-    start_at = models.DateTimeField(null=True, blank=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    venue = models.CharField(max_length=255)
+    address = models.TextField(blank=True, null=True)
+    start_at = models.DateTimeField(auto_now_add=True)
     end_at = models.DateTimeField(null=True, blank=True)
+    sale_start_at = models.DateTimeField(null=True, blank=True)
+    total_capacity = models.PositiveIntegerField(default=0)
 
-    venue_name = models.CharField(max_length=255, blank=True, default="")
-    venue_address = models.TextField(blank=True, default="")
-
-    is_published = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
 
-    bg_color = models.TextField(null=True, blank=True)
-    highlights = models.TextField(null=True, blank=True)
+    status = models.CharField(
+        max_length=100, choices=EventStatus.choices, default=EventStatus.DRAFT
+    )
 
     category = models.ForeignKey(
-        EventCategory,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="events",
+        EventCategory, on_delete=models.CASCADE, related_name="events"
     )
+    meta = models.JSONField(default=dict)
 
-    tags = models.ManyToManyField(
-        EventTag,
-        blank=True,
-        related_name="events",
-    )
+    def __str__(self):
+        return self.title
 
     class Meta:
-        verbose_name = "Event"
-        verbose_name_plural = "Events"
-        indexes = [
-            models.Index(fields=["start_at", "is_published", "end_at", "is_featured"]),
-        ]
-
-    def __str__(self) -> str:
-        return self.name
+        verbose_name = "Event Master"
+        verbose_name_plural = "Event Masters"
 
 
-class EventAsset(BaseModel):
+class TicketMaster(BaseModel):
     event = models.ForeignKey(
-        EventMaster, on_delete=models.CASCADE, related_name="additional_assets"
+        EventMaster, on_delete=models.CASCADE, related_name="tickets"
     )
-    asset = models.ForeignKey(
-        Asset, on_delete=models.CASCADE, related_name="event_assets_rel"
-    )
-    order = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        verbose_name = "Event Asset"
-        verbose_name_plural = "Event Assets"
-        ordering = ["order"]
-
-    def __str__(self) -> str:
-        return f"Asset for {self.event.name}"
-
-
-class EventTicket(BaseModel):
-    class TicketType(models.TextChoices):
-        FREE = "FREE", "Free"
-        PAID = "PAID", "Paid"
-
-    cover_image = models.ForeignKey(
-        Asset,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="event_ticket_cover_images",
-    )
-    name = models.CharField(max_length=255, db_index=True)
-    description = models.TextField(blank=True, default="")
-    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    currency = models.CharField(
-        max_length=3,
-        choices=[("INR", "Indian Rupee"), ("USD", "US Dollar"), ("EUR", "Euro")],
-        default="INR",
-    )
-    quantity = models.PositiveIntegerField(
-        null=True, blank=True, help_text="Total tickets available"
-    )
-    available_quantity = models.PositiveIntegerField(
-        null=True, blank=True, help_text="Currently available"
-    )
-
-    price_type = models.CharField(
-        max_length=20, choices=TicketType.choices, default=TicketType.PAID
-    )
-
-    event = models.ForeignKey(
-        EventMaster,
-        on_delete=models.CASCADE,
-        related_name="tickets",
-    )
-
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(null=True, blank=True, max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
-    sales_start_at = models.DateTimeField(null=True, blank=True)
-    sales_end_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.event.title}"
 
     class Meta:
-        verbose_name = "Event Ticket"
-        verbose_name_plural = "Event Tickets"
-        unique_together = ("event", "name")
-
-    def __str__(self) -> str:
-        return f"{self.name} - {self.event.name}"
+        verbose_name = "Ticket Master"
+        verbose_name_plural = "Ticket Masters"

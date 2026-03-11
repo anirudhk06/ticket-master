@@ -1,7 +1,7 @@
 import uuid
 
-from django.db import models
 from crum import get_current_user
+from django.db import models
 
 from ..mixins import AuditModel
 
@@ -13,6 +13,7 @@ class BaseModel(AuditModel):
 
     class Meta:
         abstract = True
+        ordering = ["created_at"]
 
     def save(self, *args, **kwargs):
         user = get_current_user()

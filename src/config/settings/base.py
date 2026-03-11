@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+
 from config.env import BASE_DIR, ENV
 
 ENV.read_env(env_file=os.path.join(BASE_DIR.parent, ".env"), overwrite=True)
@@ -9,7 +10,7 @@ LOCAL_APPS = [
     "db",
     "authentication",
     "bgtasks",
-    "app",
+    "api",
 ]
 
 THIRD_PARTY_APPS = [
@@ -17,6 +18,7 @@ THIRD_PARTY_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "silk",
+    "django_filters",
 ]
 
 INSTALLED_APPS = [
@@ -103,6 +105,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 AUTH_USER_MODEL = "db.User"
+APPEND_SLASH = False
 
 
 SIMPLE_JWT = {
@@ -115,11 +118,13 @@ SIMPLE_JWT = {
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
     "NON_FIELD_ERRORS_KEY": "errors",
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
 }
 
 CELERY_BROKER_URL = ENV.str("CELERY_BROKER_URL", "redis://localhost:6379/0")
