@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 
 class CustomLimitPagination(PageNumberPagination):
-    page_size = 10
+    page_size = 100
 
     def get_page_size(self, request):
         return request.query_params.get("page_size", self.page_size)
